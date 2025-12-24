@@ -167,7 +167,9 @@ export async function initCommand(options: InitOptions): Promise<void> {
         console.log(chalk.cyan(`\n📁 ${isGlobal ? 'Global' : 'Project'} installation complete: ${chalk.white(resolvedPath)}`))
         console.log(chalk.cyan('\nNext steps:'))
         console.log(chalk.white('   1. Restart Claude Code to see your new statusline'))
-        console.log(chalk.white('   2. Usage statistics work via: npx ccusage@latest'))
+        if (config.features.includes('session')) {
+          console.log(chalk.white('   2. Session reset time requires ccusage: npx ccusage@latest'))
+        }
         
       } catch (error) {
         console.log(chalk.red('\n❌ Failed to install statusline'))

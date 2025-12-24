@@ -3,7 +3,7 @@ export interface UsageFeature {
   showCost: boolean
   showTokens: boolean
   showBurnRate: boolean
-  showSession: boolean
+  showSession: boolean  // This is the only feature requiring ccusage
   showProgressBar: boolean
 }
 
@@ -29,60 +29,84 @@ burn_color() { :; }
 session_color() { :; }
 `
 
+  // Session reset time is the only feature requiring ccusage
+  const needsCcusage = config.showSession || config.showProgressBar
+
   return `${colorCode}
 # ---- cost and usage extraction ----
 session_txt=""; session_pct=0; session_bar=""
 cost_usd=""; cost_per_hour=""; tpm=""; tot_tokens=""
 
-# Extract cost data from Claude Code input
+# Extract cost and token data from Claude Code's native input
 if [ "$HAS_JQ" -eq 1 ]; then
-  # Get cost data from Claude Code's input
+  # Cost data
   cost_usd=$(echo "$input" | jq -r '.cost.total_cost_usd // empty' 2>/dev/null)
   total_duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty' 2>/dev/null)
-  
+
   # Calculate burn rate ($/hour) from cost and duration
   if [ -n "$cost_usd" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
-    # Convert ms to hours and calculate rate
     cost_per_hour=$(echo "$cost_usd $total_duration_ms" | awk '{printf "%.2f", $1 * 3600000 / $2}')
   fi
+${config.showTokens ? `
+  # Token data from native context_window (no ccusage needed)
+  input_tokens=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0' 2>/dev/null)
+  output_tokens=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0' 2>/dev/null)
+
+  if [ "$input_tokens" != "null" ] && [ "$output_tokens" != "null" ]; then
+    tot_tokens=$(( input_tokens + output_tokens ))
+    [ "$tot_tokens" -eq 0 ] && tot_tokens=""
+  fi` : ''}
+${config.showBurnRate && config.showTokens ? `
+  # Calculate tokens per minute from native data
+  if [ -n "$tot_tokens" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
+    # Convert ms to minutes and calculate rate
+    tpm=$(echo "$tot_tokens $total_duration_ms" | awk '{if ($2 > 0) printf "%.0f", $1 * 60000 / $2; else print ""}')
+  fi` : ''}
 else
   # Bash fallback for cost extraction
   cost_usd=$(echo "$input" | grep -o '"total_cost_usd"[[:space:]]*:[[:space:]]*[0-9.]*' | sed 's/.*:[[:space:]]*\\([0-9.]*\\).*/\\1/')
-  total_duration_ms=$(echo "$input" | grep -o '"total_duration_ms"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:[[:space:]]*\\([0-9]*\\).*/\\1/')  
-  
+  total_duration_ms=$(echo "$input" | grep -o '"total_duration_ms"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:[[:space:]]*\\([0-9]*\\).*/\\1/')
+
   # Calculate burn rate ($/hour) from cost and duration
   if [ -n "$cost_usd" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
-    # Convert ms to hours and calculate rate
     cost_per_hour=$(echo "$cost_usd $total_duration_ms" | awk '{printf "%.2f", $1 * 3600000 / $2}')
   fi
-fi
+${config.showTokens ? `
+  # Token data from native context_window (bash fallback)
+  input_tokens=$(echo "$input" | grep -o '"total_input_tokens"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:[[:space:]]*\\([0-9]*\\).*/\\1/')
+  output_tokens=$(echo "$input" | grep -o '"total_output_tokens"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:[[:space:]]*\\([0-9]*\\).*/\\1/')
 
-# Get token data and session info from ccusage if available
+  if [ -n "$input_tokens" ] && [ -n "$output_tokens" ]; then
+    tot_tokens=$(( input_tokens + output_tokens ))
+    [ "$tot_tokens" -eq 0 ] && tot_tokens=""
+  fi` : ''}
+${config.showBurnRate && config.showTokens ? `
+  # Calculate tokens per minute from native data
+  if [ -n "$tot_tokens" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
+    tpm=$(echo "$tot_tokens $total_duration_ms" | awk '{if ($2 > 0) printf "%.0f", $1 * 60000 / $2; else print ""}')
+  fi` : ''}
+fi
+${needsCcusage ? `
+# Session reset time requires ccusage (only feature that needs external tool)
 if command -v ccusage >/dev/null 2>&1 && [ "$HAS_JQ" -eq 1 ]; then
   blocks_output=""
-  
-  # Try ccusage with timeout for token data and session info
+
+  # Try ccusage with timeout
   if command -v timeout >/dev/null 2>&1; then
     blocks_output=$(timeout 5s ccusage blocks --json 2>/dev/null)
   elif command -v gtimeout >/dev/null 2>&1; then
-    # macOS with coreutils installed
     blocks_output=$(gtimeout 5s ccusage blocks --json 2>/dev/null)
   else
-    # No timeout available, run directly (ccusage should be fast)
     blocks_output=$(ccusage blocks --json 2>/dev/null)
   fi
+
   if [ -n "$blocks_output" ]; then
     active_block=$(echo "$blocks_output" | jq -c '.blocks[] | select(.isActive == true)' 2>/dev/null | head -n1)
-    if [ -n "$active_block" ]; then${config.showTokens ? `
-      # Get token count from ccusage
-      tot_tokens=$(echo "$active_block" | jq -r '.totalTokens // empty')` : ''}${config.showBurnRate && config.showTokens ? `
-      # Get tokens per minute from ccusage
-      tpm=$(echo "$active_block" | jq -r '.burnRate.tokensPerMinute // empty')` : ''}${config.showSession || config.showProgressBar ? `
-      
+    if [ -n "$active_block" ]; then
       # Session time calculation from ccusage
       reset_time_str=$(echo "$active_block" | jq -r '.usageLimitResetTime // .endTime // empty')
       start_time_str=$(echo "$active_block" | jq -r '.startTime // empty')
-      
+
       if [ -n "$reset_time_str" ] && [ -n "$start_time_str" ]; then
         start_sec=$(to_epoch "$start_time_str"); end_sec=$(to_epoch "$reset_time_str"); now_sec=$(date +%s)
         total=$(( end_sec - start_sec )); (( total<1 )) && total=1
@@ -93,10 +117,10 @@ if command -v ccusage >/dev/null 2>&1 && [ "$HAS_JQ" -eq 1 ]; then
         end_hm=$(fmt_time_hm "$end_sec")${config.showSession ? `
         session_txt="$(printf '%dh %dm until reset at %s (%d%%)' "$rh" "$rm" "$end_hm" "$session_pct")"` : ''}${config.showProgressBar ? `
         session_bar=$(progress_bar "$session_pct" 10)` : ''}
-      fi` : ''}
+      fi
     fi
   fi
-fi`
+fi` : ''}`
 }
 
 export function generateUsageUtilities(): string {

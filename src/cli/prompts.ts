@@ -26,9 +26,9 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
         { name: '🤖 Model Name & Version', value: 'model', checked: true },
         { name: '🧠 Context Remaining', value: 'context', checked: true },
         { name: '💵 Usage & Cost', value: 'usage', checked: true },
-        { name: '⌛ Session Time Remaining', value: 'session', checked: true },
         { name: '📊 Token Statistics', value: 'tokens', checked: true },
-        { name: '⚡ Burn Rate (tokens/min)', value: 'burnrate', checked: true }
+        { name: '⚡ Burn Rate ($/hr & tokens/min)', value: 'burnrate', checked: true },
+        { name: '⌛ Session Reset Time (requires ccusage)', value: 'session', checked: false }
       ],
       validate: (answer: string[]) => {
         if (answer.length < 1) {
@@ -63,12 +63,15 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
   ])
 
   // Set intelligent defaults
+  // ccusage is only needed for session reset time feature
+  const needsCcusage = config.features.includes('session')
+
   return {
     features: config.features,
     runtime: 'bash',
     colors: config.colors,
     theme: 'detailed',
-    ccusageIntegration: true, // Always enabled since npx works
+    ccusageIntegration: needsCcusage,
     logging: config.logging,
     customEmojis: false,
     installLocation: config.installLocation
@@ -81,14 +84,14 @@ export function displayConfigSummary(config: StatuslineConfig): void {
   console.log(`   Theme: ${config.theme}`)
   console.log(`   Colors: ${config.colors ? '✅' : '❌'}`)
   console.log(`   Features: ${config.features.join(', ')}`)
-  
+
   if (config.ccusageIntegration) {
-    console.log('   📊 ccusage integration enabled')
+    console.log('   ⚠️  Session reset time requires ccusage (npx ccusage@latest)')
   }
-  
+
   if (config.logging) {
     console.log('   📝 Debug logging enabled')
   }
-  
+
   console.log('')
 }

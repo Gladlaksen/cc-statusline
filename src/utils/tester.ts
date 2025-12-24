@@ -54,12 +54,35 @@ export function generateMockClaudeInput(config?: Partial<StatuslineConfig>): any
     transcript_path: "/home/user/.claude/conversations/test.jsonl",
     cwd: "/home/user/projects/my-project",
     workspace: {
-      current_dir: "/home/user/projects/my-project"
+      current_dir: "/home/user/projects/my-project",
+      project_dir: "/home/user/projects/my-project"
     },
     model: {
       id: "claude-opus-4-1-20250805",
       display_name: "Opus 4.1",
       version: "20250805"
+    },
+    version: "1.0.80",
+    output_style: {
+      name: "default"
+    },
+    cost: {
+      total_cost_usd: 0.42,
+      total_duration_ms: 180000,  // 3 minutes
+      total_api_duration_ms: 2300,
+      total_lines_added: 156,
+      total_lines_removed: 23
+    },
+    context_window: {
+      total_input_tokens: 15234,
+      total_output_tokens: 4521,
+      context_window_size: 200000,
+      current_usage: {
+        input_tokens: 8500,
+        output_tokens: 1200,
+        cache_creation_input_tokens: 5000,
+        cache_read_input_tokens: 2000
+      }
     }
   }
 }

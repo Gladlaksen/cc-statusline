@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-12-24
+
+### Changed
+- 🚀 **Native Token Statistics** - Token counts and TPM now use Claude Code's native `context_window` data
+  - No longer relies on ccusage for token statistics
+  - Uses `context_window.total_input_tokens` and `total_output_tokens` from Claude Code's JSON input
+  - TPM (tokens per minute) calculated from native token counts and session duration
+  - More reliable and faster - no external tool calls needed for token data
+
+- ⚠️ **Session Reset Time Now Optional** - Session reset time feature is now **off by default**
+  - Clearly marked as "(requires ccusage)" in feature selection
+  - Only feature that still requires the external ccusage tool
+  - ccusage integration only enabled when session feature is selected
+
+### Removed
+- 🗑️ **Reduced ccusage Dependency** - ccusage is no longer needed for most features
+  - Token statistics: Now native
+  - Tokens per minute: Now native
+  - Cost and burn rate: Already native since v1.3.0
+  - Only session reset time still requires ccusage
+
+### Technical
+- Refactored `src/features/usage.ts` to extract tokens from `context_window` object
+- Updated mock test data in `src/utils/tester.ts` to match Claude Code's full JSON structure
+- Config summary now warns when ccusage is required (only for session feature)
+- Cleaner generated bash scripts when session feature is disabled
+
 ## [1.3.2] - 2025-08-28
 
 ### Fixed

@@ -4,7 +4,7 @@ import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } fro
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
 
 // Version will be updated when releasing
-const VERSION = '1.3.2'
+const VERSION = '1.4.0'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
   const hasGit = config.features.includes('git')
@@ -39,6 +39,12 @@ export function generateBashStatusline(config: StatuslineConfig): string {
 STATUSLINE_VERSION="${VERSION}"
 
 input=$(cat)
+
+# ---- check jq availability ----
+HAS_JQ=0
+if command -v jq >/dev/null 2>&1; then
+  HAS_JQ=1
+fi
 ${config.logging ? generateLoggingCode() : ''}
 ${generateColorBashCode({ enabled: config.colors, theme: config.theme })}
 ${config.colors ? generateBasicColors() : ''}
@@ -61,12 +67,6 @@ function generateLoggingCode(): string {
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="\${SCRIPT_DIR}/statusline.log"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-
-# ---- check jq availability ----
-HAS_JQ=0
-if command -v jq >/dev/null 2>&1; then
-  HAS_JQ=1
-fi
 
 # ---- logging ----
 {
@@ -161,47 +161,28 @@ fi
 
 function generateContextBashCode(colors: boolean): string {
   return `
-# ---- context window calculation ----
+# ---- context window calculation (native) ----
 context_pct=""
+context_remaining_pct=""
 context_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;37m'; fi; }  # default white
 
-# Determine max context based on model
-get_max_context() {
-  local model_name="$1"
-  case "$model_name" in
-    *"Opus 4"*|*"opus 4"*|*"Opus"*|*"opus"*)
-      echo "200000"  # 200K for all Opus versions
-      ;;
-    *"Sonnet 4"*|*"sonnet 4"*|*"Sonnet 3.5"*|*"sonnet 3.5"*|*"Sonnet"*|*"sonnet"*)
-      echo "200000"  # 200K for Sonnet 3.5+ and 4.x
-      ;;
-    *"Haiku 3.5"*|*"haiku 3.5"*|*"Haiku 4"*|*"haiku 4"*|*"Haiku"*|*"haiku"*)
-      echo "200000"  # 200K for modern Haiku
-      ;;
-    *"Claude 3 Haiku"*|*"claude 3 haiku"*)
-      echo "100000"  # 100K for original Claude 3 Haiku
-      ;;
-    *)
-      echo "200000"  # Default to 200K
-      ;;
-  esac
-}
+if [ "$HAS_JQ" -eq 1 ]; then
+  # Get context window size and current usage from native Claude Code input
+  CONTEXT_SIZE=$(echo "$input" | jq -r '.context_window.context_window_size // 200000' 2>/dev/null)
+  USAGE=$(echo "$input" | jq '.context_window.current_usage' 2>/dev/null)
 
-if [ -n "$session_id" ] && [ "$HAS_JQ" -eq 1 ]; then
-  MAX_CONTEXT=$(get_max_context "$model_name")
-  
-  # Convert current dir to session file path
-  project_dir=$(echo "$current_dir" | sed "s|~|$HOME|g" | sed 's|/|-|g' | sed 's|^-||')
-  session_file="$HOME/.claude/projects/-\${project_dir}/\${session_id}.jsonl"
-  
-  if [ -f "$session_file" ]; then
-    # Get the latest input token count from the session file
-    latest_tokens=$(tail -20 "$session_file" | jq -r 'select(.message.usage) | .message.usage | ((.input_tokens // 0) + (.cache_read_input_tokens // 0))' 2>/dev/null | tail -1)
-    
-    if [ -n "$latest_tokens" ] && [ "$latest_tokens" -gt 0 ]; then
-      context_used_pct=$(( latest_tokens * 100 / MAX_CONTEXT ))
+  if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
+    # Calculate current context from current_usage fields
+    # Formula: input_tokens + cache_creation_input_tokens + cache_read_input_tokens
+    CURRENT_TOKENS=$(echo "$USAGE" | jq '(.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null)
+
+    if [ -n "$CURRENT_TOKENS" ] && [ "$CURRENT_TOKENS" -gt 0 ] 2>/dev/null; then
+      context_used_pct=$(( CURRENT_TOKENS * 100 / CONTEXT_SIZE ))
       context_remaining_pct=$(( 100 - context_used_pct ))
-      
+      # Clamp to valid range
+      (( context_remaining_pct < 0 )) && context_remaining_pct=0
+      (( context_remaining_pct > 100 )) && context_remaining_pct=100
+
       # Set color based on remaining percentage
       if [ "$context_remaining_pct" -le 20 ]; then
         context_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;203m'; fi; }  # coral red
@@ -210,7 +191,7 @@ if [ -n "$session_id" ] && [ "$HAS_JQ" -eq 1 ]; then
       else
         context_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;158m'; fi; }  # mint green
       fi
-      
+
       context_pct="\${context_remaining_pct}%"
     fi
   fi
