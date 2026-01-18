@@ -2,6 +2,7 @@ import { StatuslineConfig } from '../cli/prompts.js'
 import { generateColorBashCode, generateBasicColors } from '../features/colors.js'
 import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } from '../features/git.js'
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
+import { BeadsFeature, generateBeadsBashCode, generateBeadsDisplayCode } from '../features/beads.js'
 
 // Version will be updated when releasing
 const VERSION = '1.4.0'
@@ -12,6 +13,7 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   const hasDirectory = config.features.includes('directory')
   const hasModel = config.features.includes('model')
   const hasContext = config.features.includes('context')
+  const hasBeads = config.features.includes('beads')
 
   // Build usage feature config
   const usageConfig = {
@@ -29,6 +31,14 @@ export function generateBashStatusline(config: StatuslineConfig): string {
     showBranch: hasGit,
     showChanges: false, // Removed delta changes per user request
     compactMode: config.theme === 'compact'
+  }
+
+  // Build beads feature config
+  const beadsConfig: BeadsFeature = {
+    enabled: hasBeads,
+    showReady: hasBeads,
+    showInProgress: hasBeads,
+    showBlocked: hasBeads
   }
 
   const timestamp = new Date().toISOString()
@@ -54,8 +64,9 @@ ${generateBasicDataExtraction(hasDirectory, hasModel, hasContext)}
 ${hasGit ? generateGitBashCode(gitConfig, config.colors) : ''}
 ${hasContext ? generateContextBashCode(config.colors) : ''}
 ${hasUsage ? generateUsageBashCode(usageConfig, config.colors) : ''}
+${hasBeads ? generateBeadsBashCode(beadsConfig, config.colors) : ''}
 ${config.logging ? generateLoggingOutput() : ''}
-${generateDisplaySection(config, gitConfig, usageConfig)}
+${generateDisplaySection(config, gitConfig, usageConfig, beadsConfig)}
 `
 
   return script.replace(/\n\n\n+/g, '\n\n').trim() + '\n'
@@ -211,7 +222,7 @@ function generateLoggingOutput(): string {
 `
 }
 
-function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any): string {
+function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any, beadsConfig?: BeadsFeature): string {
   const emojis = config.colors && !config.customEmojis
 
   return `
@@ -232,7 +243,7 @@ if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
   printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
 fi
 
-# Line 2: Context and session time
+# Line 2: Context, session time, and beads
 line2=""${config.features.includes('context') ? `
 if [ -n "$context_pct" ]; then
   context_bar=$(progress_bar "$context_remaining_pct" 10)
@@ -243,6 +254,20 @@ if [ -n "$session_txt" ]; then
     line2="$line2  ⌛ $(session_color)\${session_txt}$(rst) $(session_color)[\${session_bar}]$(rst)"
   else
     line2="⌛ $(session_color)\${session_txt}$(rst) $(session_color)[\${session_bar}]$(rst)"
+  fi
+fi` : ''}${beadsConfig?.enabled ? `
+# Beads issue tracking display
+if [ -n "$beads_ready" ] || [ -n "$beads_in_progress" ] || [ -n "$beads_blocked" ]; then
+  if [ "$beads_ready" != "0" ] || [ "$beads_in_progress" != "0" ] || [ "$beads_blocked" != "0" ]; then
+    beads_display="📍 $(beads_ready_color)\${beads_ready} ready$(rst) | $(beads_wip_color)\${beads_in_progress} wip$(rst)"
+    if [ "$beads_blocked" != "0" ]; then
+      beads_display="$beads_display | $(beads_blocked_color)\${beads_blocked} blocked$(rst)"
+    fi
+    if [ -n "$line2" ]; then
+      line2="$line2  $beads_display"
+    else
+      line2="$beads_display"
+    fi
   fi
 fi` : ''}${config.features.includes('context') ? `
 if [ -z "$line2" ] && [ -z "$context_pct" ]; then

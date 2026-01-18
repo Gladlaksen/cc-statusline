@@ -28,7 +28,8 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
         { name: '💵 Usage & Cost', value: 'usage', checked: true },
         { name: '📊 Token Statistics', value: 'tokens', checked: true },
         { name: '⚡ Burn Rate ($/hr & tokens/min)', value: 'burnrate', checked: true },
-        { name: '⌛ Session Reset Time (requires ccusage)', value: 'session', checked: false }
+        { name: '⌛ Session Reset Time (requires ccusage)', value: 'session', checked: false },
+        { name: '📍 Beads Issue Tracking (requires bd CLI)', value: 'beads', checked: false }
       ],
       validate: (answer: string[]) => {
         if (answer.length < 1) {
