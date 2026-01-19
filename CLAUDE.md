@@ -75,3 +75,48 @@ Key design patterns:
 - Maintain 2-space indentation without semicolons
 - Follow conventional commits format for commit messages
 - Generated bash scripts must be POSIX-compliant with fallbacks
+
+---
+
+## Beads Issue Tracking
+
+This repo uses beads for issue tracking. Run `bd prime` after compaction, clear, or new session.
+
+### When to Create Issues (PROACTIVE)
+Create a beads issue with `bd create` when:
+1. **Session starts with non-trivial work** - If the user's request will span multiple steps or sessions, create an issue immediately
+2. **Discovering new work** - If while working you find something that needs fixing or improving later, create an issue
+3. **Bugs found** - Always create a bug issue when discovering broken functionality
+4. **Features requested** - Create a feature issue for any new capability request
+
+### Core Rules
+- Check `bd ready` at session start for existing work
+- Create issues BEFORE starting non-trivial work (don't wait until end)
+- Use `bd update <id> --status=in_progress` when starting on an issue
+- Use `bd close <id>` immediately after completing work
+- Use TodoWrite only for simple single-session tasks that don't need tracking
+- Before closing session: `bd sync --flush-only`
+
+### Issue Creation Examples
+```bash
+# Starting work on a feature
+bd create --title="Add dark mode toggle" --type=feature --priority=2
+
+# Found a bug while working
+bd create --title="Fix login timeout error" --type=bug --priority=1
+
+# Discovered future work
+bd create --title="Refactor auth module" --type=task --priority=3
+```
+
+### Essential Commands
+```bash
+bd ready                    # Show issues ready to work (no blockers)
+bd list --status=open       # All open issues
+bd show <id>                # Detailed issue view
+bd create --title="..." --type=task|bug|feature --priority=2
+bd update <id> --status=in_progress
+bd close <id>               # Mark complete
+bd dep add <issue> <depends-on>  # Add dependency
+bd sync --flush-only        # Export to JSONL before closing
+```
